@@ -790,28 +790,28 @@ if file:
         available = [c for c in show_cols if c in df.columns]
         st.dataframe(df[available].reset_index(drop=True), use_container_width=True)
 
+    st.divider()
+    st.subheader("📥 Download Dashboard Report")
+
+    if st.button("Generate PPT Report"):
+
+        figures = [
+            ("Production vs Rejection", chart1_fig),
+            ("Location-wise Rejection", chart2_fig),
+            ("Part-wise Production vs Rejection", chart3_fig),
+            ("Customer-wise Rejection", chart4_fig),
+            ("Department-wise Rejection", chart5_fig),
+        ]
+
+        ppt_file = create_ppt(figures, dept_groups_data=groups_dept)
+
+        with open(ppt_file, "rb") as f:
+            st.download_button(
+                label="⬇️ Download PPT",
+                data=f,
+                file_name="Production_Dashboard_Report.pptx",
+                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            )
+
 else:
     st.info("📂 Please upload a Production Excel file to get started.")
-
-st.divider()
-st.subheader("📥 Download Dashboard Report")
-
-if st.button("Generate PPT Report"):
-
-    figures = [
-        ("Production vs Rejection", chart1_fig),
-        ("Location-wise Rejection", chart2_fig),
-        ("Part-wise Production vs Rejection", chart3_fig),
-        ("Customer-wise Rejection", chart4_fig),
-        ("Department-wise Rejection", chart5_fig),
-    ]
-
-    ppt_file = create_ppt(figures, dept_groups_data=groups_dept)
-
-    with open(ppt_file, "rb") as f:
-        st.download_button(
-            label="⬇️ Download PPT",
-            data=f,
-            file_name="Production_Dashboard_Report.pptx",
-            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
-        )
