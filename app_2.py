@@ -344,31 +344,23 @@ if file:
             if row.str.contains("Pipe Fittings", case=False).any():
                 g_prod = pd.to_numeric(raw_full.iloc[i, 2], errors='coerce')
                 g_rej  = pd.to_numeric(raw_full.iloc[i, 3], errors='coerce')
-                # Col 5 is empty in April layout; col 6 holds the actual Rej %
-                g_pct  = pd.to_numeric(raw_full.iloc[i, 6], errors='coerce')
-                # Fallback: compute from prod/rej if still missing
-                if pd.isna(g_pct) and pd.notna(g_prod) and g_prod > 0:
-                    g_pct = (g_rej / g_prod) if pd.notna(g_rej) else 0
-
+                g_prod = float(g_prod) if pd.notna(g_prod) else 0.0
+                g_rej  = float(g_rej)  if pd.notna(g_rej)  else 0.0
                 group_data["Pipe Fittings"] = {
-                    "prod": g_prod if pd.notna(g_prod) else 0,
-                    "rej":  g_rej if pd.notna(g_rej) else 0,
-                    "pct":  (g_pct * 100) if pd.notna(g_pct) else 0
+                    "prod": g_prod,
+                    "rej":  g_rej,
+                    "pct":  (g_rej / g_prod * 100) if g_prod > 0 else 0.0,
                 }
 
             elif row.str.contains("Engineering", case=False).any():
                 g_prod = pd.to_numeric(raw_full.iloc[i, 2], errors='coerce')
                 g_rej  = pd.to_numeric(raw_full.iloc[i, 3], errors='coerce')
-                # Col 5 is empty in April layout; col 6 holds the actual Rej %
-                g_pct  = pd.to_numeric(raw_full.iloc[i, 6], errors='coerce')
-                # Fallback: compute from prod/rej if still missing
-                if pd.isna(g_pct) and pd.notna(g_prod) and g_prod > 0:
-                    g_pct = (g_rej / g_prod) if pd.notna(g_rej) else 0
-
+                g_prod = float(g_prod) if pd.notna(g_prod) else 0.0
+                g_rej  = float(g_rej)  if pd.notna(g_rej)  else 0.0
                 group_data["Engineering"] = {
-                    "prod": g_prod if pd.notna(g_prod) else 0,
-                    "rej":  g_rej if pd.notna(g_rej) else 0,
-                    "pct":  (g_pct * 100) if pd.notna(g_pct) else 0
+                    "prod": g_prod,
+                    "rej":  g_rej,
+                    "pct":  (g_rej / g_prod * 100) if g_prod > 0 else 0.0,
                 }
 
         # Add Overall row from df aggregates
@@ -667,46 +659,9 @@ if file:
     st.subheader("🏭 Department-wise Rejection (MT)")
 
     dept_names_list = ["Moulding", "Melting", "Technology", "Fettling", "Quality", "Maintenance"]
-    # Column indices in the raw summary rows for each dept's Rej MT value
-    # (col 7=Moulding, 9=Melting, 11=Technology, 13=Fettling, 15=Quality, 17=Maintenance)
-    dept_raw_cols   = [7, 9, 11, 13, 15, 17]
-    dept_df_cols    = ["Moulding_Rej_MT", "Melting_Rej_MT", "Technology_Rej_MT",
-                       "Fettling_Rej_MT", "Quality_Rej_MT", "Maintenance_Rej_MT"]
+    # April layout: dept Rej MT values are at these raw summary-row col indices
+    dept_raw_cols_apr = [7, 9, 11, 13, 15, 17]
 
-    # ── Read group-level dept breakdowns from raw summary rows ────────────────
-    raw_full_dept = pd.read_excel(file, sheet_name=sheet_name, header=None)
-
-    def _get_group_dept(raw_df, group_keyword):
-        """Return dict {dept_name: rej_MT} for a given group keyword from summary rows."""
-        for i in range(raw_df.shape[0]):
-            row = raw_df.iloc[i].astype(str)
-            if row.str.contains(group_keyword, case=False).any():
-                vals = {}
-                for name, col in zip(dept_names_list, dept_raw_cols):
-                    v = pd.to_numeric(raw_df.iloc[i, col], errors='coerce')
-                    vals[name] = float(v) if pd.notna(v) else 0.0
-                return vals
-        return {name: 0.0 for name in dept_names_list}
-
-    eng_dept  = _get_group_dept(raw_full_dept, "Engineering")
-    pf_dept   = _get_group_dept(raw_full_dept, "Pipe Fittings")
-
-    # Overall = sum of both groups per department
-    overall_dept = {name: eng_dept[name] + pf_dept[name] for name in dept_names_list}
-
-    # Group production totals (already computed earlier)
-    eng_prod  = group_data.get("Engineering",   {}).get("prod", 0)
-    pf_prod   = group_data.get("Pipe Fittings", {}).get("prod", 0)
-    total_prod_dept = df['Prod. Wt. in MT'].sum()
-
-    # Build rows: (group_label, prod_MT, dept_rej_dict)
-    groups_dept = [
-        ("Overall",        total_prod_dept, overall_dept),
-        ("Pipe Fittings",  pf_prod,         pf_dept),
-        ("Engineering",    eng_prod,        eng_dept),
-    ]
-
-    # ── Colour palette for 6 departments ─────────────────────────────────────
     dept_colors = {
         "Moulding":    "#2E5B8A",
         "Melting":     "#E09B3D",
@@ -716,6 +671,36 @@ if file:
         "Maintenance": "#7B6FA3",
     }
 
+    # ── Read group-level dept breakdowns from raw summary rows ────────────────
+    raw_full_dept = pd.read_excel(file, sheet_name=sheet_name, header=None)
+
+    def _get_group_dept(raw_df, group_keyword, raw_cols):
+        for i in range(raw_df.shape[0]):
+            row = raw_df.iloc[i].astype(str)
+            if row.str.contains(group_keyword, case=False).any():
+                vals = {}
+                for name, col in zip(dept_names_list, raw_cols):
+                    v = pd.to_numeric(raw_df.iloc[i, col], errors='coerce')
+                    vals[name] = float(v) if pd.notna(v) else 0.0
+                return vals
+        return {name: 0.0 for name in dept_names_list}
+
+    eng_dept = _get_group_dept(raw_full_dept, "Engineering",   dept_raw_cols_apr)
+    pf_dept  = _get_group_dept(raw_full_dept, "Pipe Fittings", dept_raw_cols_apr)
+    overall_dept = {name: eng_dept[name] + pf_dept[name] for name in dept_names_list}
+
+    # Group production totals
+    eng_prod        = group_data.get("Engineering",   {}).get("prod", 0)
+    pf_prod         = group_data.get("Pipe Fittings", {}).get("prod", 0)
+    total_prod_dept = df['Prod. Wt. in MT'].sum()
+
+    groups_dept = [
+        ("Overall",       total_prod_dept, overall_dept),
+        ("Pipe Fittings", pf_prod,         pf_dept),
+        ("Engineering",   eng_prod,        eng_dept),
+    ]
+
+    # ── Draw the chart ────────────────────────────────────────────────────────
     fig, axes = plt.subplots(3, 1, figsize=(11, 8), sharex=False)
     fig.suptitle("Department-wise Rejection by Group", fontsize=13, fontweight='bold', y=1.01)
 
@@ -723,32 +708,26 @@ if file:
         total_rej_grp = sum(dept_rej.values())
         overall_pct   = (total_rej_grp / prod_mt * 100) if prod_mt > 0 else 0
 
-        # ── Production bar (background) ──────────────────────────────────────
         ax.barh(0, prod_mt, height=0.55, color='#E8EDF2', label='Production', zorder=2)
 
-        # ── Stacked rejection bars ────────────────────────────────────────────
         left_val = 0.0
         for dept in dept_names_list:
-            val = dept_rej[dept]
+            val = dept_rej.get(dept, 0)
             if val > 0:
                 ax.barh(0, val, left=left_val, height=0.55,
                         color=dept_colors[dept], label=dept, zorder=3)
             left_val += val
 
-        # ── Production label ──────────────────────────────────────────────────
-        x_label_offset = prod_mt * 0.012
-        ax.text(prod_mt + x_label_offset, 0.18,
+        x_off = prod_mt * 0.012
+        ax.text(prod_mt + x_off,  0.18,
                 f"{prod_mt:.2f} MT", va='center', fontsize=9, color='#555555')
-
-        # ── Rejection summary label ───────────────────────────────────────────
-        ax.text(prod_mt + x_label_offset, -0.18,
+        ax.text(prod_mt + x_off, -0.18,
                 f"Rej: {total_rej_grp:.3f} MT  ({overall_pct:.2f}%)",
                 va='center', fontsize=9, color='#D4573C', fontweight='bold')
 
-        # ── Per-dept breakdown below the bar ─────────────────────────────────
         breakdown_parts = []
         for dept in dept_names_list:
-            val = dept_rej[dept]
+            val = dept_rej.get(dept, 0)
             pct = (val / prod_mt * 100) if prod_mt > 0 else 0
             if val > 0:
                 breakdown_parts.append(f"{dept}: {val:.3f} MT ({pct:.2f}%)")
@@ -756,7 +735,6 @@ if file:
             ax.text(0, -0.42, "  |  ".join(breakdown_parts),
                     va='center', fontsize=7.5, color='#555555')
 
-        # ── Y-axis label = group name ─────────────────────────────────────────
         ax.set_yticks([0])
         ax.set_yticklabels([grp_label], fontsize=10, fontweight='bold')
         ax.set_ylim(-0.7, 0.7)
@@ -766,7 +744,6 @@ if file:
         ax.spines[['top', 'right', 'left']].set_visible(False)
         ax.yaxis.set_tick_params(length=0)
 
-    # ── Shared legend ─────────────────────────────────────────────────────────
     from matplotlib.patches import Patch
     legend_elements = [Patch(facecolor='#E8EDF2', label='Production')] + \
                       [Patch(facecolor=dept_colors[d], label=d) for d in dept_names_list]
@@ -777,6 +754,7 @@ if file:
     st.pyplot(fig)
     chart5_fig = fig
     plt.close(fig)
+
 
     st.divider()
 
